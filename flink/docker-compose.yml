@@ -1,0 +1,38 @@
+# Local Flink 1.20 cluster. It reaches the Confluent brokers running in
+# OrbStack Kubernetes directly -- OrbStack resolves *.svc.cluster.local
+# from inside Docker containers, so no port-forward is needed.
+#
+#   docker compose -f flink/docker-compose.yml up -d
+#   Web UI: http://localhost:8081
+
+services:
+  jobmanager:
+    image: flink:1.20.1-scala_2.12-java17
+    container_name: bank-flink-jobmanager
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        parallelism.default: 2
+        rest.flamegraph.enabled: true
+    volumes:
+      - ./lib/flink-sql-connector-kafka-3.3.0-1.20.jar:/opt/flink/lib/flink-sql-connector-kafka.jar:ro
+      - ./sql:/opt/sql:ro
+
+  taskmanager:
+    image: flink:1.20.1-scala_2.12-java17
+    container_name: bank-flink-taskmanager
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 8
+        parallelism.default: 2
+    volumes:
+      - ./lib/flink-sql-connector-kafka-3.3.0-1.20.jar:/opt/flink/lib/flink-sql-connector-kafka.jar:ro

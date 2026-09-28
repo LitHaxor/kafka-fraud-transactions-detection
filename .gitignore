@@ -1,0 +1,6 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+bank/seed_data.json
+flink/lib/*.jar

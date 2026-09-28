@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo Bank — Live Fraud Monitor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ctext y=%2213%22 font-size=%2213%22%3E%F0%9F%8F%A6%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b24; --panel-2:#1c2330; --line:#252d3b;
+    --text:#e6edf3; --muted:#8b98a9; --accent:#4c8dff;
+    --green:#3fb950; --red:#f85149; --amber:#d29922; --purple:#a371f7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:16px;padding:16px 20px;
+         border-bottom:1px solid var(--line);background:var(--panel)}
+  h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--red)}
+  .dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+  .spacer{flex:1}
+  .stats{display:flex;gap:26px}
+  .stat b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
+  .stat span{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+  main{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;padding:14px;
+       align-items:start}
+  @media(max-width:1000px){main{grid-template-columns:1fr}}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+          overflow:hidden}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);
+     margin:0;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel-2)}
+  .scroll{max-height:390px;overflow-y:auto}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  td,th{padding:7px 12px;text-align:left;border-bottom:1px solid var(--line);
+        white-space:nowrap;font-size:13px}
+  th{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;
+     position:sticky;top:0;background:var(--panel-2);z-index:1}
+  tbody tr:last-child td{border-bottom:none}
+  .num{text-align:right}
+  .pos{color:var(--green)} .neg{color:var(--text)}
+  .over{color:var(--red)}
+  .muted{color:var(--muted)}
+  .flash{animation:flash .7s ease-out}
+  @keyframes flash{from{background:rgba(76,141,255,.22)}to{background:transparent}}
+  .pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;
+        font-weight:600;letter-spacing:.3px}
+  .CRITICAL{background:rgba(248,81,73,.16);color:var(--red)}
+  .HIGH{background:rgba(210,153,34,.16);color:var(--amber)}
+  .MEDIUM{background:rgba(163,113,247,.16);color:var(--purple)}
+  .LOW{background:rgba(139,152,169,.16);color:var(--muted)}
+  .alert{padding:10px 14px;border-bottom:1px solid var(--line);
+         border-left:3px solid transparent}
+  .alert.CRITICAL{border-left-color:var(--red)}
+  .alert.HIGH{border-left-color:var(--amber)}
+  .alert.MEDIUM{border-left-color:var(--purple)}
+  .alert .top{display:flex;gap:8px;align-items:center;margin-bottom:3px}
+  .alert .rule{font-weight:600;font-size:12.5px}
+  .alert .detail{color:var(--muted);font-size:12px}
+  .empty{padding:26px 14px;text-align:center;color:var(--muted);font-size:13px}
+  .btn{background:var(--panel-2);color:var(--text);border:1px solid var(--line);
+       border-radius:6px;padding:6px 14px;font-size:12.5px;font-weight:600;cursor:pointer;
+       font-family:inherit}
+  .btn:hover{border-color:var(--accent)}
+  .btn.paused{background:var(--accent);border-color:var(--accent);color:#fff}
+  .buffered{color:var(--amber);font-size:12px;font-variant-numeric:tabular-nums;
+            min-width:96px}
+</style>
+</head>
+<body>
+<header>
+  <div class="dot" id="dot"></div>
+  <h1>Demo Bank · Live Fraud Monitor</h1>
+  <div class="spacer"></div>
+  <button id="pause" class="btn">Pause</button>
+  <span id="buffered" class="buffered"></span>
+  <div class="stats">
+    <div class="stat"><b id="s-txn">0</b><span>Transactions</span></div>
+    <div class="stat"><b id="s-vol">0</b><span>Volume</span></div>
+    <div class="stat"><b id="s-alert" style="color:var(--red)">0</b><span>Fraud alerts</span></div>
+  </div>
+</header>
+
+<main>
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <section>
+      <h2>Transaction stream</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Time</th><th>Account</th><th>Customer</th><th>Merchant</th>
+                     <th>Loc</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+          <tbody id="txns"><tr><td colspan="7" class="empty">waiting for transactions…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <section>
+      <h2>Accounts</h2>
+      <div class="scroll" style="max-height:260px">
+        <table>
+          <thead><tr><th>Account</th><th>Customer</th><th>Type</th><th>Risk</th>
+                     <th class="num">Balance</th></tr></thead>
+          <tbody id="accts"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section>
+    <h2>Fraud alerts · from Flink</h2>
+    <div class="scroll" style="max-height:664px" id="alerts">
+      <div class="empty">no alerts yet — the Flink job emits these</div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const money = n => (n==null?'—':Number(n).toLocaleString(undefined,
+                    {minimumFractionDigits:2, maximumFractionDigits:2}));
+const clock = ts => (ts||'').slice(11,19) || '—';
+let accounts = {};
+let paused = false;
+const buffer = [];           // events that arrived while paused
+const BUFFER_MAX = 500;
+
+function setBufferedLabel(){
+  $('buffered').textContent = buffer.length
+    ? `${buffer.length} held${buffer.length >= BUFFER_MAX ? '+' : ''}` : '';
+}
+
+$('pause').onclick = () => {
+  paused = !paused;
+  $('pause').textContent = paused ? 'Resume' : 'Pause';
+  $('pause').classList.toggle('paused', paused);
+  if(!paused){
+    // replay oldest-first so the feed keeps its ordering
+    buffer.forEach(m => m.type === 'txn' ? addTxn(m.data) : addAlert(m.data));
+    buffer.length = 0;
+    setBufferedLabel();
+  }
+};
+
+function renderStats(s){
+  if(!s) return;
+  $('s-txn').textContent = s.txns.toLocaleString();
+  $('s-vol').textContent = money(s.volume);
+  $('s-alert').textContent = s.alerts.toLocaleString();
+}
+
+function txnRow(t){
+  const tr = document.createElement('tr');
+  tr.className = 'flash';
+  const credit = t.txn_type === 'DEPOSIT';
+  tr.innerHTML = `
+    <td class="muted">${clock(t.event_time)}</td>
+    <td>${t.account_id}</td>
+    <td class="muted">${t.customer_name ?? ''}</td>
+    <td>${t.merchant ?? ''}</td>
+    <td class="muted">${t.country ?? ''}</td>
+    <td class="num ${credit?'pos':'neg'}">${credit?'+':'−'}${money(t.amount)}</td>
+    <td class="num ${t.balance<0?'over':'muted'}">${money(t.balance)}</td>`;
+  return tr;
+}
+
+function addTxn(t){
+  const body = $('txns');
+  if(body.querySelector('.empty')) body.innerHTML = '';
+  body.prepend(txnRow(t));
+  while(body.rows.length > 60) body.deleteRow(-1);
+}
+
+function addAlert(a){
+  const box = $('alerts');
+  if(box.querySelector('.empty')) box.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = `alert ${a.severity} flash`;
+  div.innerHTML = `
+    <div class="top">
+      <span class="pill ${a.severity}">${a.severity}</span>
+      <span class="rule">${a.rule_name}</span>
+      <span class="muted" style="margin-left:auto">${clock(a.detected_at)}</span>
+    </div>
+    <div class="detail">
+      <strong>${a.account_id}</strong> · ${a.customer_name ?? ''} — ${a.detail}
+    </div>`;
+  box.prepend(div);
+  while(box.children.length > 40) box.lastChild.remove();
+}
+
+function renderAccounts(){
+  $('accts').innerHTML = Object.values(accounts)
+    .sort((a,b)=>a.account_id.localeCompare(b.account_id))
+    .map(a=>`<tr><td>${a.account_id}</td><td class="muted">${a.customer_name}</td>
+      <td class="muted">${a.account_type}</td>
+      <td><span class="pill ${a.risk_band==='HIGH'?'HIGH':'LOW'}">${a.risk_band}</span></td>
+      <td class="num ${a.balance<0?'over':''}" id="bal-${a.account_id}">${money(a.balance)}</td></tr>`).join('');
+}
+
+function hold(m){
+  buffer.push(m);
+  if(buffer.length > BUFFER_MAX) buffer.shift();
+  setBufferedLabel();
+}
+
+function connect(){
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen  = () => $('dot').classList.add('on');
+  ws.onclose = () => { $('dot').classList.remove('on'); setTimeout(connect, 1500); };
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if(m.type === 'snapshot'){
+      m.accounts.forEach(a => accounts[a.account_id] = a);
+      renderAccounts();
+      m.transactions.slice().reverse().forEach(addTxn);
+      m.alerts.slice().reverse().forEach(addAlert);
+      renderStats(m.stats);
+    } else if(m.type === 'txn'){
+      renderStats(m.stats);                 // counters stay live even when paused
+      if(paused){ hold(m); } else { addTxn(m.data); }
+      if(m.balance && accounts[m.balance.account_id]){
+        accounts[m.balance.account_id].balance = m.balance.value;
+        const cell = $(`bal-${m.balance.account_id}`);
+        if(cell){ cell.textContent = money(m.balance.value);
+                  cell.className = 'num' + (m.balance.value<0?' over':''); }
+      }
+    } else if(m.type === 'alert'){
+      renderStats(m.stats);
+      if(paused){ hold(m); } else { addAlert(m.data); }
+    }
+  };
+}
+connect();
+</script>
+</body>
+</html>

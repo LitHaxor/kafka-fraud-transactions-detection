@@ -1,0 +1,6 @@
+confluent_kafka
+pydantic
+pydantic-settings
+faker
+fastapi
+uvicorn[standard]
